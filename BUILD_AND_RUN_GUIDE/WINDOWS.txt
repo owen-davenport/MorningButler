@@ -1,0 +1,36 @@
+WINDOWS 10 / 11 INSTRUCTIONS
+
+------------------------------------
+RUNNING THE APP
+------------------------------------
+1. Install Python:
+   https://www.python.org/downloads/
+
+2. Open Command Prompt.
+
+3. Navigate to the project folder:
+   cd path\to\Morning_butler_srccode
+
+4. Install requirements:
+   pip install -r requirements.txt
+
+5. Run the app:
+   python butler-fetch.py
+
+6. Open your browser:
+   http://127.0.0.1:5050
+
+------------------------------------
+PACKAGING THE APP (CREATING MorningButler.exe)
+------------------------------------
+1. Install PyInstaller:
+   pip install pyinstaller
+
+2. Build the .exe:
+   pyinstaller MorningButler.spec
+
+3. When finished, open the "dist" folder.
+   Your Windows executable will be:
+   MorningButler.exe
+
+Double-click it to run.

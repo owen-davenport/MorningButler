@@ -1,0 +1,40 @@
+MACOS (Intel or ARM) / LINUX INSTRUCTIONS
+
+------------------------------------
+RUNNING THE APP
+------------------------------------
+1. Install Python 3:
+   https://www.python.org/downloads/
+
+2. Open Terminal.
+
+3. Navigate to the project folder:
+   cd path/to/Morning_butler_srccode
+
+4. Install requirements:
+   pip install -r requirements.txt
+
+5. Run the app:
+   python3 butler-fetch.py
+
+6. Open your browser:
+   http://127.0.0.1:5050
+
+------------------------------------
+PACKAGING THE APP (CREATING .app OR LINUX BINARY)
+------------------------------------
+1. Install PyInstaller:
+   pip install pyinstaller
+
+2. Build the application:
+   pyinstaller MorningButler.spec
+
+3. When finished, open the "dist" folder.
+
+   macOS users will see:
+      MorningButler.app
+
+   Linux users will see:
+      a standalone executable file
+
+You can run or share the packaged file.

@@ -1,0 +1,63 @@
+WELCOME!
+
+This folder explains how to run and package Morning Butler on ANY computer:
+- Windows 10 or 11
+- macOS (Intel or M1/M2/M3)
+- Linux (Ubuntu, Debian, etc.)
+
+No programming experience is required.
+
+------------------------------------
+WHAT YOU NEED FIRST
+------------------------------------
+1. Install Python 3.10 or newer:
+   https://www.python.org/downloads/
+
+2. Download this project folder.
+
+3. Open a terminal:
+   - Windows: Command Prompt or PowerShell
+   - Mac: Terminal
+   - Linux: Terminal
+
+4. Install the required packages:
+
+   pip install -r requirements.txt
+
+------------------------------------
+HOW TO RUN THE APP
+------------------------------------
+After installing the requirements, type:
+
+   python butler-fetch.py
+   (or python3 butler-fetch.py on Mac/Linux)
+
+Then open your browser and go to:
+
+   http://127.0.0.1:5050
+
+Morning Butler will appear.
+
+------------------------------------
+HOW TO PACKAGE THE APP (CREATE .exe OR .app)
+------------------------------------
+This step is optional. It creates a standalone desktop application.
+
+1. Make sure PyInstaller is installed:
+   pip install pyinstaller
+
+2. Run the packaging command:
+   pyinstaller MorningButler.spec
+
+3. After it finishes, look inside the new "dist" folder.
+   You will find:
+   - Windows: MorningButler.exe
+   - macOS: MorningButler.app
+   - Linux: a standalone binary
+
+You can copy or share the file inside "dist" with others.
+
+------------------------------------
+NEED HELP?
+------------------------------------
+Ask Owen. He built it.

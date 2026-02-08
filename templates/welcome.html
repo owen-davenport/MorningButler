@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morning Butler</title>
+    <link rel="icon" href="/static/butler.png">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #fafaf9;
+            color: #222;
+        }
+        .light-theme {
+            background: #fafaf9;
+            color: #222;
+        }
+        .dark-theme {
+            background: #0f0f0f;
+            color: #e8e8e8;
+        }
+        .feature-section {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .dark-theme .feature-section {
+            border-color: rgba(255,255,255,0.15);
+            background-color: rgba(255,255,255,0.04);
+        }
+        .feature-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        .dark-theme .feature-section h3 {
+            color: #e8e8e8;
+        }
+        .description {
+            font-size: 0.9em;
+            color: #666;
+            margin: 10px 0 15px 0;
+            font-style: italic;
+        }
+        .dark-theme .description {
+            color: rgba(255,255,255,0.7);
+        }
+        .checkbox-group {
+            margin-bottom: 10px;
+        }
+        .api-fields {
+            margin-left: 20px;
+            margin-top: 10px;
+            display: none;
+        }
+        .button-group {
+            margin-top: 30px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        input[type="submit"] {
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to Morning Butler</h1>
+    <p>Your personal assistant for a productive morning!</p>
+
+    <h2>Features:</h2>
+    <ul>
+        <li>Canvas reminders</li>
+        <li>Weather updates</li>
+        <li>News headlines</li>
+        <li>Your Recent Emails</li>
+    </ul>
+
+    <h2>Set Things Up</h2>
+    <p>To begin using Morning Butler, please customize your preferences...</p>
+    <div>
+        <form method="POST" action="/save_preferences">
+            <!-- Canvas Reminders Section -->
+            <div class="feature-section">
+                <h3>Canvas Reminders</h3>
+                <p class="description">Get notified about upcoming assignments and deadlines from your Canvas courses.</p>
+                <div class="checkbox-group">
+                    <label for="canvas-reminders">Enable Canvas Reminders:</label>
+                    <input type="checkbox" id="canvas-reminders" name="canvas-reminders">
+                </div>
+                <div class="api-fields" id="canvas-fields">
+                    <label for="canvas-API-token">Canvas API Token:</label>
+                    <input type="password" id="canvas-API-token" name="canvas-API-token" placeholder="Canvas API token"><br><br>
+                    <label for="canvas-API-token-expiration">Canvas API Token Expiration Date:</label>
+                    <input type="date" id="canvas-API-token-expiration" name="canvas-API-token-expiration"><br>
+                </div>
+            </div>
+
+            <!-- Your Recent Emails Section -->
+            <div class="feature-section">
+                <h3>Your Recent Emails</h3>
+                <p class="description">See a preview of your most recent emails from one or more accounts.</p>
+                <div class="checkbox-group">
+                    <label for="recent-emails">Show Recent Emails:</label>
+                    <input type="checkbox" id="recent-emails" name="recent-emails">
+                </div>
+                <div class="api-fields" id="email-fields">
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 10px; font-weight: 500;">Email Accounts:</label>
+                        <div id="email-accounts-container"></div>
+                        <button type="button" id="add-email-account" style="margin-top: 10px; padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">+ Add Email Account</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Weather Settings (NEW) -->
+            <div class="feature-section">
+                <h3>Weather Updates</h3>
+                <p class="description">Show real-time weather on your dashboard. Uses Open-Meteo API (no account needed).</p>
+                <div class="checkbox-group">
+                    <label for="weather-enabled">Enable Weather Updates:</label>
+                    <input type="checkbox" id="weather-enabled" name="weather-enabled">
+                </div>
+                <div class="api-fields" id="weather-api-fields">
+                    <p style="font-size: 0.9em; opacity: 0.7;">Weather fetches automatically based on your ZIP code. Powered by <a href="https://open-meteo.com" target="_blank" style="color: inherit; text-decoration: underline;">Open-Meteo</a> (free, no API key required).</p>
+                </div>
+            </div>
+
+            <!-- News Settings (NEW) -->
+            <div class="feature-section">
+                <h3>Morning Headlines</h3>
+                <p class="description">See the latest news headlines on your dashboard. Sourced from RSS feeds.</p>
+                <div class="checkbox-group">
+                    <label for="news-enabled">Enable News Headlines:</label>
+                    <input type="checkbox" id="news-enabled" name="news-enabled">
+                </div>
+                <div class="api-fields" id="news-api-fields">
+                    <p style="font-size: 0.9em; opacity: 0.7;">Headlines are fetched from Reuters, AP News, and NPR. Updated every 10 minutes.</p>
+                </div>
+            </div>
+
+            <!-- Location Settings (NEW) -->
+            <div class="feature-section">
+                <h3>Location Settings</h3>
+                <p class="description">Used for weather updates and local time calculations.</p>
+                <div class="checkbox-group">
+                    <input type="radio" id="loc-zip" name="location-method" value="zip" checked>
+                    <label for="loc-zip">Use my ZIP code</label><br>
+                    <input type="radio" id="loc-auto" name="location-method" value="auto">
+                    <label for="loc-auto">Detect my location automatically</label>
+                </div>
+                <div class="api-fields" id="zip-fields" style="display:block;">
+                    <label for="zip-code">ZIP Code:</label>
+                    <input type="text" id="zip-code" name="zip-code" placeholder="e.g. 94102" pattern="\d{5}" maxlength="5"><br>
+                </div>
+                <input type="hidden" id="location-lat" name="location-lat">
+                <input type="hidden" id="location-lon" name="location-lon">
+                <p id="location-status" style="font-size: 0.85em; opacity: 0.7; margin: 8px 0 0 0;"></p>
+            </div>
+
+            <!-- Assignment Filters Section (NEW) -->
+            <div class="feature-section">
+                <h3>Assignment Filters</h3>
+                <p class="description">Control how assignments are displayed on your dashboard.</p>
+                
+                <div class="checkbox-group">
+                    <label for="hide-no-due-date">
+                        <input type="checkbox" id="hide-no-due-date" name="hide-no-due-date" checked>
+                        Automatically hide assignments with no due date
+                    </label>
+                </div>
+
+                <div class="checkbox-group">
+                    <label for="hide-completed">
+                        <input type="checkbox" id="hide-completed" name="hide-completed">
+                        Hide completed/graded assignments
+                    </label>
+                </div>
+
+                <label for="default-assignment-view" style="display: block; margin-top: 15px;">Default assignment view:</label>
+                <div class="checkbox-group">
+                    <input type="radio" id="view-week" name="default-assignment-view" value="week" checked>
+                    <label for="view-week">This week only</label><br>
+                    <input type="radio" id="view-day" name="default-assignment-view" value="day">
+                    <label for="view-day">Due today only</label><br>
+                    <input type="radio" id="view-all" name="default-assignment-view" value="all">
+                    <label for="view-all">All assignments (no filter)</label>
+                </div>
+            </div>
+
+            <div class="feature-section">
+                <h3>Class Display Names</h3>
+                <p class="description">Customize how course names appear on your dashboard.</p>
+                <div id="course-aliases" class="checkbox-group"></div>
+                <p id="course-aliases-empty" style="font-size: 0.9em; opacity: 0.6; margin: 0;">No courses found yet. Save your Canvas token first.</p>
+            </div>
+
+            <!-- Appearance Settings (NEW) -->
+            <div class="feature-section">
+                <h3>Appearance Settings</h3>
+                <p class="description">Choose how Morning Butler should look.</p>
+                <div class="checkbox-group">
+                    <input type="radio" id="theme-light" name="theme" value="light">
+                    <label for="theme-light">Light Mode</label><br>
+                    <input type="radio" id="theme-dark" name="theme" value="dark">
+                    <label for="theme-dark">Dark Mode</label><br>
+                    <input type="radio" id="theme-auto" name="theme" value="auto" checked>
+                    <label for="theme-auto">Auto (match system theme)</label>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <input type="submit" value="Save Preferences">
+            </div>
+
+            <p style="text-align: center; color: #666; font-size: 0.9em; margin-top: 20px;"><em>(You can change this later anytime.)</em></p>
+        </form>
+    </div>
+
+    <footer style="margin-top: 40px; text-align: center; color: rgb(147, 147, 147);">
+        <p>Morning Butler. Copyright© 2026. By Owen Davenport</p>
+    </footer>
+
+    <script>
+        // Prefill form from user_config.json
+        async function prefillForm() {
+            try {
+                const res = await fetch('/user_config.json');
+                if (!res.ok) return;
+                const config = await res.json();
+                
+                // Prefill Canvas
+                if (config.canvas && config.canvas.enabled) {
+                    document.getElementById('canvas-reminders').checked = true;
+                    document.getElementById('canvas-reminders').dispatchEvent(new Event('change'));
+                }
+                if (config.canvas && config.canvas.token) {
+                    document.getElementById('canvas-API-token').value = config.canvas.token;
+                }
+                if (config.canvas && config.canvas.token_expiration) {
+                    document.getElementById('canvas-API-token-expiration').value = config.canvas.token_expiration;
+                }
+                
+                // Prefill Location
+                if (config.location) {
+                    const method = config.location.method || 'zip';
+                    document.getElementById('loc-' + method).checked = true;
+                    document.getElementById('loc-' + method).dispatchEvent(new Event('change'));
+                    if (config.location.zip_code) {
+                        document.getElementById('zip-code').value = config.location.zip_code;
+                    }
+                    if (config.location.lat && config.location.lon) {
+                        document.getElementById('location-lat').value = config.location.lat;
+                        document.getElementById('location-lon').value = config.location.lon;
+                    }
+                }
+                
+                // Prefill Theme
+                if (config.theme) {
+                    const themeRadio = document.getElementById('theme-' + config.theme);
+                    if (themeRadio) {
+                        themeRadio.checked = true;
+                        themeRadio.dispatchEvent(new Event('change'));
+                    }
+                }
+
+                // Prefill Assignment Filters
+                if (config.assignmentFilters) {
+                    if (config.assignmentFilters.hideNoDueDate !== undefined) {
+                        document.getElementById('hide-no-due-date').checked = config.assignmentFilters.hideNoDueDate;
+                    }
+                    if (config.assignmentFilters.hideCompleted !== undefined) {
+                        document.getElementById('hide-completed').checked = config.assignmentFilters.hideCompleted;
+                    }
+                    if (config.assignmentFilters.defaultView) {
+                        const viewRadio = document.getElementById('view-' + config.assignmentFilters.defaultView);
+                        if (viewRadio) viewRadio.checked = true;
+                    }
+                }
+
+                // Prefill Weather and News
+                if (config.weather && config.weather.enabled !== undefined) {
+                    document.getElementById('weather-enabled').checked = config.weather.enabled;
+                    document.getElementById('weather-enabled').dispatchEvent(new Event('change'));
+                }
+                if (config.news && config.news.enabled !== undefined) {
+                    document.getElementById('news-enabled').checked = config.news.enabled;
+                    document.getElementById('news-enabled').dispatchEvent(new Event('change'));
+                }
+
+                // Prefill Email Accounts
+                const emailConfig = config.emails || {};
+                const emailAccounts = Array.isArray(emailConfig)
+                    ? emailConfig
+                    : (emailConfig.accounts || []);
+                if (emailAccounts.length > 0 || emailConfig.enabled) {
+                    const recentEmails = document.getElementById('recent-emails');
+                    if (recentEmails) {
+                        recentEmails.checked = true;
+                        recentEmails.dispatchEvent(new Event('change'));
+                    }
+                }
+                emailAccounts.forEach(acc => {
+                    addEmailAccount({
+                        label: acc.label || '',
+                        email: acc.email || '',
+                        app_password: acc.app_password || '',
+                        imap_host: acc.imap_host || ''
+                    });
+                });
+
+                // Prefill Course Aliases
+                const aliases = (config.canvas && config.canvas.course_aliases) ? config.canvas.course_aliases : {};
+                const courses = (config.canvas && config.canvas.courses) ? config.canvas.courses : [];
+                renderCourseAliases(courses, aliases);
+            } catch (e) {
+                console.error("Failed to prefill form:", e);
+            }
+        }
+
+        document.getElementById('canvas-reminders').addEventListener('change', function() {
+            document.getElementById('canvas-fields').style.display = this.checked ? 'block' : 'none';
+        });
+        document.getElementById('recent-emails').addEventListener('change', function() {
+            document.getElementById('email-fields').style.display = this.checked ? 'block' : 'none';
+        });
+
+        // Weather toggle
+        document.getElementById('weather-enabled').addEventListener('change', function() {
+            document.getElementById('weather-api-fields').style.display = this.checked ? 'block' : 'none';
+        });
+
+        // News toggle
+        document.getElementById('news-enabled').addEventListener('change', function() {
+            document.getElementById('news-api-fields').style.display = this.checked ? 'block' : 'none';
+        });
+
+        // Email accounts management
+        let emailAccountCount = 0;
+        function addEmailAccount(preset = {}) {
+            emailAccountCount++;
+            const container = document.getElementById('email-accounts-container');
+            const accountDiv = document.createElement('div');
+            accountDiv.style.marginBottom = '12px';
+            accountDiv.style.padding = '10px';
+            accountDiv.style.border = '1px solid rgba(0,0,0,0.15)';
+            accountDiv.style.borderRadius = '3px';
+            accountDiv.innerHTML = `
+                <label style="display: block; margin-bottom: 6px; font-weight: 500;">Account ${emailAccountCount}:</label>
+                <input type="text" name="email-account-label-${emailAccountCount}" placeholder="Email label (e.g., 'Personal')" value="${preset.label || ''}" style="width: 100%; padding: 6px; margin-bottom: 6px; border: 1px solid rgba(0,0,0,0.15); border-radius: 3px;"><br>
+                <input type="email" name="email-address-${emailAccountCount}" placeholder="Email address (e.g., name@example.com)" value="${preset.email || ''}" style="width: 100%; padding: 6px; margin-bottom: 6px; border: 1px solid rgba(0,0,0,0.15); border-radius: 3px;"><br>
+                <input type="password" name="email-app-password-${emailAccountCount}" placeholder="Gmail App Password" value="${preset.app_password || ''}" style="width: 100%; padding: 6px; margin-bottom: 6px; border: 1px solid rgba(0,0,0,0.15); border-radius: 3px;"><br>
+                <input type="text" name="email-imap-host-${emailAccountCount}" placeholder="IMAP host (default: imap.gmail.com)" value="${preset.imap_host || ''}" style="width: 100%; padding: 6px; margin-bottom: 6px; border: 1px solid rgba(0,0,0,0.15); border-radius: 3px;"><br>
+                <button type="button" class="remove-email-account" data-id="${emailAccountCount}" style="padding: 4px 8px; background: #dc3545; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 0.9em;">Remove</button>
+            `;
+            container.appendChild(accountDiv);
+            
+            // Add remove handler
+            accountDiv.querySelector('.remove-email-account').addEventListener('click', function() {
+                accountDiv.remove();
+            });
+        }
+
+        document.getElementById('add-email-account').addEventListener('click', addEmailAccount);
+
+        function renderCourseAliases(courses, aliases) {
+            const container = document.getElementById('course-aliases');
+            const empty = document.getElementById('course-aliases-empty');
+            if (!container) return;
+            container.innerHTML = '';
+            if (!courses || courses.length === 0) {
+                if (empty) empty.style.display = 'block';
+                return;
+            }
+            if (empty) empty.style.display = 'none';
+            courses.forEach(c => {
+                const row = document.createElement('div');
+                row.style.marginBottom = '8px';
+                const label = document.createElement('label');
+                label.style.display = 'block';
+                label.style.fontWeight = '500';
+                label.textContent = c.full_name || c.name || `Course ${c.id}`;
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.name = `course-alias-${c.id}`;
+                input.placeholder = 'Custom display name (optional)';
+                input.value = aliases[String(c.id)] || '';
+                input.style.width = '100%';
+                input.style.padding = '6px';
+                input.style.border = '1px solid rgba(0,0,0,0.15)';
+                input.style.borderRadius = '3px';
+                row.appendChild(label);
+                row.appendChild(input);
+                container.appendChild(row);
+            });
+        }
+
+        // Location Settings: show/hide ZIP field based on radio selection
+        function updateZipFields() {
+            var zipFields = document.getElementById('zip-fields');
+            var useZip = document.getElementById('loc-zip') && document.getElementById('loc-zip').checked;
+            if (zipFields) zipFields.style.display = useZip ? 'block' : 'none';
+        }
+        var locZip = document.getElementById('loc-zip');
+        var locAuto = document.getElementById('loc-auto');
+        if (locZip) locZip.addEventListener('change', updateZipFields);
+        if (locAuto) locAuto.addEventListener('change', updateZipFields);
+        updateZipFields();
+
+        async function setAutoLocation() {
+            const status = document.getElementById('location-status');
+            if (status) status.textContent = 'Detecting your location...';
+            if (!navigator.geolocation) {
+                if (status) status.textContent = 'Automatic location is not available in this browser.';
+                return;
+            }
+            navigator.geolocation.getCurrentPosition(async (pos) => {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+                const latInput = document.getElementById('location-lat');
+                const lonInput = document.getElementById('location-lon');
+                if (latInput) latInput.value = lat;
+                if (lonInput) lonInput.value = lon;
+                try {
+                    const resp = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&count=1&language=en`);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        const result = data && data.results && data.results[0];
+                        const zip = (result && (result.postcode || result.postcodes || result.postal_code || result.zip)) || '';
+                        if (zip) {
+                            const zipInput = document.getElementById('zip-code');
+                            if (zipInput) zipInput.value = String(zip).slice(0, 5);
+                        }
+                        if (status) status.textContent = 'Location detected.';
+                    } else {
+                        if (status) status.textContent = 'Location detected, but ZIP lookup failed.';
+                    }
+                } catch (e) {
+                    if (status) status.textContent = 'Location detected, but ZIP lookup failed.';
+                }
+            }, () => {
+                if (status) status.textContent = 'Unable to access location. Check browser permissions.';
+            }, { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 });
+        }
+
+        if (locAuto) {
+            locAuto.addEventListener('change', function() {
+                if (this.checked) setAutoLocation();
+            });
+        }
+
+        // Appearance Settings: theme application and preview
+        function applyTheme(mode) {
+            document.body.classList.remove('light-theme', 'dark-theme');
+            if (mode === 'light') {
+                document.body.classList.add('light-theme');
+            } else if (mode === 'dark') {
+                document.body.classList.add('dark-theme');
+            } else {
+                var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                document.body.classList.add(prefersDark ? 'dark-theme' : 'light-theme');
+            }
+        }
+
+        var themeRadios = document.querySelectorAll('input[name="theme"]');
+        themeRadios.forEach(function(r) {
+            r.addEventListener('change', function() {
+                applyTheme(this.value);
+            });
+        });
+
+        if (window.matchMedia) {
+            var mq = window.matchMedia('(prefers-color-scheme: dark)');
+            var mqHandler = function(e) {
+                var autoSelected = document.getElementById('theme-auto') && document.getElementById('theme-auto').checked;
+                if (autoSelected) applyTheme('auto');
+            };
+            if (typeof mq.addEventListener === 'function') mq.addEventListener('change', mqHandler);
+            else if (typeof mq.addListener === 'function') mq.addListener(mqHandler);
+        }
+
+        var selectedTheme = document.querySelector('input[name="theme"]:checked');
+        if (selectedTheme) {
+            applyTheme(selectedTheme.value);
+        } else {
+            applyTheme('auto');
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', prefillForm);
+        } else {
+            prefillForm();
+        }
+    </script>
+
+</body>
+</html>
