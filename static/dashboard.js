@@ -96,7 +96,7 @@ async function checkForAppUpdate(config) {
         return;
     }
 
-    const currentVersion = normalizeVersion(updates.current_version || '1.0.0');
+    const currentVersion = normalizeVersion(updates.current_version || '1.0.1');
     try {
         const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
             headers: { 'Accept': 'application/vnd.github+json' }

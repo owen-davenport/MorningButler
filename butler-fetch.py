@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from tzlocal import get_localzone
 import time
 
+APP_VERSION = "1.0.1"
+
 def resource_path(relative_path):
     if hasattr(sys, '_MEIPASS'):
         return os.path.join(sys._MEIPASS, relative_path)
@@ -81,7 +83,7 @@ DEFAULT_CONFIG = {
     "updates": {
         "enabled": False,
         "repo": "",
-        "current_version": "1.0.0"
+        "current_version": APP_VERSION
     }
 }
 
@@ -100,6 +102,19 @@ def ensure_user_config_exists():
                 config_to_write = DEFAULT_CONFIG
         with open(USER_CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(config_to_write, f, indent=4)
+    else:
+        # Keep app version synced automatically so users never have to set it manually.
+        try:
+            with open(USER_CONFIG_FILE, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+            updates = existing.get("updates") or {}
+            if updates.get("current_version") != APP_VERSION:
+                updates["current_version"] = APP_VERSION
+                existing["updates"] = updates
+                with open(USER_CONFIG_FILE, "w", encoding="utf-8") as f:
+                    json.dump(existing, f, indent=4)
+        except Exception as e:
+            print(f"[WARN] Could not sync app version in config: {e}")
 
 def is_port_in_use(port, host="127.0.0.1"):
     try:
@@ -660,7 +675,7 @@ def save_preferences():
     auto_refresh_minutes_raw = request.form.get("auto-refresh-minutes", "10")
     update_enabled = request.form.get("update-check-enabled") == "on"
     update_repo = request.form.get("update-repo", "").strip()
-    current_version = request.form.get("app-version", "1.0.0").strip()
+    current_version = APP_VERSION
     
     # NEW: Capture assignment filters
     hide_no_due_date = request.form.get("hide-no-due-date") == "on"
@@ -749,7 +764,7 @@ def save_preferences():
         "updates": {
             "enabled": update_enabled,
             "repo": update_repo,
-            "current_version": current_version if current_version else "1.0.0"
+            "current_version": current_version
         }
     }
 
