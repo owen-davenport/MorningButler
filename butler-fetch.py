@@ -3,6 +3,7 @@ from flask import Flask, request, redirect, url_for, send_file, jsonify
 import sys, os
 import json
 import requests
+import socket
 from datetime import datetime
 from datetime import timezone
 import re
@@ -71,8 +72,19 @@ DEFAULT_CONFIG = {
     "emails": {
         "enabled": False,
         "accounts": []
+    },
+    "dashboard": {
+        "auto_refresh_enabled": True,
+        "auto_refresh_minutes": 10
+    },
+    "updates": {
+        "enabled": False,
+        "repo": "",
+        "current_version": "1.0.0"
     }
 }
+
+DEFAULT_PORT = 5050
 
 def ensure_user_config_exists():
     if not os.path.exists(USER_CONFIG_FILE):
@@ -87,6 +99,14 @@ def ensure_user_config_exists():
                 config_to_write = DEFAULT_CONFIG
         with open(USER_CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(config_to_write, f, indent=4)
+
+def is_port_in_use(port, host="127.0.0.1"):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.3)
+            return sock.connect_ex((host, port)) == 0
+    except Exception:
+        return False
 
 # Cache for API responses (in-memory with timestamp)
 API_CACHE = {
@@ -574,6 +594,11 @@ def save_preferences():
     weather_enabled = request.form.get("weather-enabled") == "on"
     news_enabled = request.form.get("news-enabled") == "on"
     emails_enabled = request.form.get("recent-emails") == "on"
+    auto_refresh_enabled = request.form.get("auto-refresh-enabled") == "on"
+    auto_refresh_minutes_raw = request.form.get("auto-refresh-minutes", "10")
+    update_enabled = request.form.get("update-check-enabled") == "on"
+    update_repo = request.form.get("update-repo", "").strip()
+    current_version = request.form.get("app-version", "1.0.0").strip()
     
     # NEW: Capture assignment filters
     hide_no_due_date = request.form.get("hide-no-due-date") == "on"
@@ -639,8 +664,27 @@ def save_preferences():
         "emails": {
             "enabled": emails_enabled,
             "accounts": email_accounts
+        },
+        "dashboard": {
+            "auto_refresh_enabled": auto_refresh_enabled,
+            "auto_refresh_minutes": 10
+        },
+        "updates": {
+            "enabled": update_enabled,
+            "repo": update_repo,
+            "current_version": current_version if current_version else "1.0.0"
         }
     }
+
+    try:
+        auto_refresh_minutes = int(auto_refresh_minutes_raw)
+        if auto_refresh_minutes < 1:
+            auto_refresh_minutes = 1
+        if auto_refresh_minutes > 60:
+            auto_refresh_minutes = 60
+        config["dashboard"]["auto_refresh_minutes"] = auto_refresh_minutes
+    except Exception:
+        config["dashboard"]["auto_refresh_minutes"] = 10
 
     # Fetch Canvas courses & assignments if token is valid
     if canvas_enabled and canvas_token:
@@ -683,6 +727,10 @@ def save_preferences():
 @app.route("/dashboard.js")
 def dashboard_js():
     return send_file(resource_path("static/dashboard.js"), mimetype="application/javascript")
+
+@app.route("/health")
+def health():
+    return jsonify({"ok": True, "timestamp": datetime.now(timezone.utc).isoformat()})
 
 @app.route("/weather")
 def weather():
@@ -821,18 +869,26 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"[WARN] Startup config check failed: {e}")
 
-        def _open_browser():
+        def _open_browser(port):
             time.sleep(1)
-            webbrowser.open("http://127.0.0.1:5050")
+            webbrowser.open(f"http://127.0.0.1:{port}")
+
+        if is_port_in_use(DEFAULT_PORT):
+            print(f"[INFO] Existing Morning Butler instance detected on port {DEFAULT_PORT}.")
+            try:
+                webbrowser.open(f"http://127.0.0.1:{DEFAULT_PORT}")
+            except Exception as e:
+                print(f"[WARN] Browser open failed: {e}")
+            sys.exit(0)
 
         try:
-            threading.Thread(target=_open_browser, daemon=True).start()
+            threading.Thread(target=_open_browser, args=(DEFAULT_PORT,), daemon=True).start()
         except Exception as e:
             print(f"[WARN] Browser auto-open failed: {e}")
     except Exception as e:
         print(f"[WARN] Startup wrapper error: {e}")
 
     try:
-        app.run(debug=False, port=5050)
+        app.run(debug=False, host="127.0.0.1", port=DEFAULT_PORT, use_reloader=False)
     except Exception as e:
         print(f"[ERROR] Server failed to start: {e}")

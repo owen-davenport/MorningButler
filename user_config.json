@@ -1,32 +1,41 @@
 {
-    "canvas": {
-        "enabled": false,
-        "token": "",
-        "token_expiration": "",
-        "courses": [],
-        "assignments": [],
-        "course_aliases": {}
-    },
-    "weather": {
-        "enabled": true
-    },
-    "news": {
-        "enabled": true
-    },
-    "theme": "auto",
-    "location": {
-        "method": "zip",
-        "zip_code": "",
-        "lat": "",
-        "lon": ""
-    },
-    "assignmentFilters": {
-        "hideNoDueDate": true,
-        "hideCompleted": false,
-        "defaultView": "week"
-    },
-    "emails": {
-        "enabled": false,
-        "accounts": []
-    }
+  "canvas": {
+    "enabled": false,
+    "token": "",
+    "token_expiration": "",
+    "courses": [],
+    "assignments": [],
+    "course_aliases": {}
+  },
+  "weather": {
+    "enabled": true
+  },
+  "news": {
+    "enabled": true
+  },
+  "theme": "auto",
+  "location": {
+    "method": "zip",
+    "zip_code": "",
+    "lat": "",
+    "lon": ""
+  },
+  "assignmentFilters": {
+    "hideNoDueDate": true,
+    "hideCompleted": false,
+    "defaultView": "week"
+  },
+  "emails": {
+    "enabled": false,
+    "accounts": []
+  },
+  "dashboard": {
+    "auto_refresh_enabled": true,
+    "auto_refresh_minutes": 10
+  },
+  "updates": {
+    "enabled": true,
+    "repo": "owen-davenport/MorningButler",
+    "current_version": "1.0.0"
+  }
 }

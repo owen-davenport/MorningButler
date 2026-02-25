@@ -2,6 +2,7 @@
 // CONFIG & SEEN STATE
 // ===============================
 const SEEN_ANNOUNCEMENTS_KEY = 'butler_seen_announcements';
+let AUTO_REFRESH_TIMER = null;
 
 async function loadConfig() {
     try {
@@ -46,6 +47,65 @@ function getNewsEnabled(config) {
     if (!config) return true;
     if (config.news && typeof config.news.enabled === 'boolean') return config.news.enabled;
     return true;
+}
+
+function getAutoRefreshSettings(config) {
+    const dash = (config && config.dashboard) ? config.dashboard : {};
+    const enabled = typeof dash.auto_refresh_enabled === 'boolean' ? dash.auto_refresh_enabled : true;
+    let minutes = parseInt(dash.auto_refresh_minutes ?? 10, 10);
+    if (isNaN(minutes) || minutes < 1) minutes = 10;
+    if (minutes > 60) minutes = 60;
+    return { enabled, minutes };
+}
+
+function normalizeVersion(version) {
+    return String(version || '').trim().replace(/^v/i, '');
+}
+
+function compareVersions(a, b) {
+    const aParts = normalizeVersion(a).split('.').map(n => parseInt(n, 10) || 0);
+    const bParts = normalizeVersion(b).split('.').map(n => parseInt(n, 10) || 0);
+    const len = Math.max(aParts.length, bParts.length);
+    for (let i = 0; i < len; i++) {
+        const av = aParts[i] || 0;
+        const bv = bParts[i] || 0;
+        if (av > bv) return 1;
+        if (av < bv) return -1;
+    }
+    return 0;
+}
+
+async function checkForAppUpdate(config) {
+    const updates = (config && config.updates) ? config.updates : {};
+    const notice = document.getElementById('update-notice');
+    if (!notice) return;
+    notice.style.display = 'none';
+    notice.textContent = '';
+
+    if (!updates.enabled) return;
+    const repo = String(updates.repo || '').trim();
+    if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) {
+        notice.textContent = 'Update checks are enabled, but repo is not set (use owner/repo).';
+        notice.style.display = 'block';
+        return;
+    }
+
+    const currentVersion = normalizeVersion(updates.current_version || '1.0.0');
+    try {
+        const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+            headers: { 'Accept': 'application/vnd.github+json' }
+        });
+        if (!res.ok) return;
+        const payload = await res.json();
+        const latest = normalizeVersion(payload.tag_name || payload.name || '');
+        if (!latest) return;
+        if (compareVersions(latest, currentVersion) > 0) {
+            notice.innerHTML = `Update available: v${latest} (current v${currentVersion}). <a href="${payload.html_url}" target="_blank" rel="noopener noreferrer">Open release</a>`;
+            notice.style.display = 'block';
+        }
+    } catch (e) {
+        console.warn('Update check failed:', e);
+    }
 }
 
 // ===============================
@@ -115,6 +175,8 @@ function revealItems(container, items, formatter) {
 // CLICK HANDLERS
 // ===============================
 function setupClickHandlers(container) {
+    if (!container || container.dataset.boundClick === '1') return;
+    container.dataset.boundClick = '1';
     container.addEventListener('click', (e) => {
         const item = e.target.closest('.list-item');
         if (!item) return;
@@ -303,6 +365,8 @@ function sortAssignments(assignments, sortBy) {
 async function renderDashboard() {
     console.log("Rendering dashboard...");
     applyTheme('auto');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    if (loadingIndicator) loadingIndicator.style.display = 'inline-flex';
 
     // Set an early greeting and loading line to avoid a blank minute
     const now = new Date();
@@ -326,6 +390,7 @@ async function renderDashboard() {
 
     const config = await loadConfig();
     applyTheme(config.theme || 'auto');
+    await checkForAppUpdate(config);
 
     const weatherEnabled = getWeatherEnabled(config);
     const newsEnabled = getNewsEnabled(config);
@@ -350,6 +415,7 @@ async function renderDashboard() {
 
     if (!assignmentsList || !announcementsList) {
         console.error("Dashboard elements missing");
+        if (loadingIndicator) loadingIndicator.style.display = 'none';
         return;
     }
 
@@ -483,17 +549,19 @@ async function renderDashboard() {
     setupClickHandlers(announcementsList);
 
     // Toggle button
-    toggleBtn.addEventListener('click', () => {
-        if (toggleBtn.textContent === 'Show all') {
-            showAllAssignments = true;
-            renderAssignmentsFiltered(searchInput?.value || '', sortSelect?.value || 'due-asc');
-            toggleBtn.textContent = 'Show less';
-        } else {
-            showAllAssignments = false;
-            renderAssignmentsFiltered();
-            toggleBtn.textContent = 'Show all';
-        }
-    });
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', () => {
+            if (toggleBtn.textContent === 'Show all') {
+                showAllAssignments = true;
+                renderAssignmentsFiltered(searchInput?.value || '', sortSelect?.value || 'due-asc');
+                toggleBtn.textContent = 'Show less';
+            } else {
+                showAllAssignments = false;
+                renderAssignmentsFiltered();
+                toggleBtn.textContent = 'Show all';
+            }
+        });
+    }
 
     // Weather
     if (weatherEnabled && weatherData && weatherSection) {
@@ -594,7 +662,7 @@ async function renderDashboard() {
             e.preventDefault();
             showAllAssignments = true;
             renderAssignmentsFiltered(searchInput?.value || '', sortSelect?.value || 'due-asc');
-            toggleBtn.textContent = 'Show less';
+            if (toggleBtn) toggleBtn.textContent = 'Show less';
             assignmentsList.scrollIntoView({ behavior: 'smooth' });
         });
     }
@@ -610,6 +678,20 @@ async function renderDashboard() {
     }
 
     console.log("Dashboard render complete");
+
+    // Auto-refresh by reloading the page on an interval to avoid stale UI state.
+    const autoRefresh = getAutoRefreshSettings(config);
+    if (AUTO_REFRESH_TIMER) {
+        clearInterval(AUTO_REFRESH_TIMER);
+        AUTO_REFRESH_TIMER = null;
+    }
+    if (autoRefresh.enabled) {
+        AUTO_REFRESH_TIMER = setInterval(() => {
+            window.location.reload();
+        }, autoRefresh.minutes * 60 * 1000);
+    }
+
+    if (loadingIndicator) loadingIndicator.style.display = 'none';
 }
 
 // ===============================
