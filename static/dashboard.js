@@ -81,12 +81,18 @@ async function checkForAppUpdate(config) {
     if (!notice) return;
     notice.style.display = 'none';
     notice.textContent = '';
+    const checkedAt = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    const setUpdateNotice = (type, message) => {
+        const iconClass = type === 'ok' ? 'update-icon ok' : 'update-icon warn';
+        const iconText = type === 'ok' ? '\u2713' : '!';
+        notice.innerHTML = `<span class="${iconClass}" aria-hidden="true">${iconText}</span>${message}`;
+        notice.style.display = 'block';
+    };
 
     if (!updates.enabled) return;
     const repo = String(updates.repo || '').trim();
     if (!/^[^/\s]+\/[^/\s]+$/.test(repo)) {
-        notice.textContent = 'Update checks are enabled, but repo is not set (use owner/repo).';
-        notice.style.display = 'block';
+        setUpdateNotice('warn', 'Update checks enabled, but repo is not set (use owner/repo).');
         return;
     }
 
@@ -95,16 +101,24 @@ async function checkForAppUpdate(config) {
         const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
             headers: { 'Accept': 'application/vnd.github+json' }
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+            setUpdateNotice('warn', `Update check failed (${res.status}).`);
+            return;
+        }
         const payload = await res.json();
         const latest = normalizeVersion(payload.tag_name || payload.name || '');
-        if (!latest) return;
+        if (!latest) {
+            setUpdateNotice('warn', 'Update check completed, but no release tag was found.');
+            return;
+        }
         if (compareVersions(latest, currentVersion) > 0) {
-            notice.innerHTML = `Update available: v${latest} (current v${currentVersion}). <a href="${payload.html_url}" target="_blank" rel="noopener noreferrer">Open release</a>`;
-            notice.style.display = 'block';
+            setUpdateNotice('warn', `Update available: v${latest} (current v${currentVersion}). <a href="${payload.html_url}" target="_blank" rel="noopener noreferrer">Open release</a>`);
+        } else {
+            setUpdateNotice('ok', `Checked for updates at ${checkedAt}. You are up to date (v${currentVersion}).`);
         }
     } catch (e) {
         console.warn('Update check failed:', e);
+        setUpdateNotice('warn', 'Update check failed due to a network error.');
     }
 }
 
@@ -143,12 +157,12 @@ function shortenAssignmentName(fullName, maxLen = 45) {
 // ===============================
 // REVEAL ANIMATION
 // ===============================
-function revealItems(container, items, formatter) {
+function revealItems(container, items, formatter, emptyText = 'Your morning is clear.') {
     container.innerHTML = '';
     if (items.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'empty-state';
-        empty.textContent = 'Your morning is clear.';
+        empty.textContent = emptyText;
         container.appendChild(empty);
         return;
     }
@@ -237,6 +251,62 @@ async function fetchNews() {
     }
 }
 
+async function fetchGmailData() {
+    try {
+        const res = await fetch('/gmail_data');
+        if (!res.ok) return [];
+        const data = await res.json();
+        return data.items || [];
+    } catch (e) {
+        console.error("Failed to fetch Gmail data:", e);
+        return [];
+    }
+}
+
+async function fetchConnectionStatus() {
+    try {
+        const res = await fetch('/connection_status');
+        if (!res.ok) return null;
+        return await res.json();
+    } catch (e) {
+        console.error("Failed to fetch connection status:", e);
+        return null;
+    }
+}
+
+function setConnectionRow(prefix, connected, text) {
+    const dot = document.getElementById(`${prefix}-connection-dot`);
+    const label = document.getElementById(`${prefix}-connection-text`);
+    if (dot) dot.classList.toggle('ok', !!connected);
+    if (label) label.textContent = text;
+}
+
+function renderConnectionStatus(status) {
+    const checked = document.getElementById('connection-last-checked');
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (checked) checked.textContent = `Connection status checked at ${timeStr}`;
+
+    if (!status) {
+        setConnectionRow('canvas', false, 'Canvas: unable to check right now');
+        setConnectionRow('email', false, 'Email: unable to check right now');
+        return;
+    }
+
+    const canvas = status.canvas || {};
+    const email = status.email || {};
+
+    const canvasText = canvas.configured
+        ? `Canvas: ${canvas.connected ? 'connected' : 'not connected'} (${canvas.message || 'Unknown'})`
+        : 'Canvas: not configured';
+    const emailText = email.configured
+        ? `Email: ${email.connected ? 'connected' : 'not connected'} (${email.message || 'Unknown'})`
+        : 'Email: not configured';
+
+    setConnectionRow('canvas', !!canvas.connected, canvasText);
+    setConnectionRow('email', !!email.connected, emailText);
+}
+
 // ===============================
 // FORMAT DATA
 // ===============================
@@ -320,7 +390,7 @@ function formatAnnouncementData(canvasData) {
             course: a.course,
             title: a.title,
             posted: posted,
-            id: id,
+            announcementId: id,
             isSeen: isAnnouncementSeen(id),
             url: a.url || ''
         };
@@ -394,11 +464,13 @@ async function renderDashboard() {
 
     const weatherEnabled = getWeatherEnabled(config);
     const newsEnabled = getNewsEnabled(config);
+    const emailsEnabled = isEmailsEnabled(config);
 
-    const [canvasData, weatherData, newsData] = await Promise.all([
+    const [canvasData, weatherData, newsData, emailsData] = await Promise.all([
         fetchCanvasData(),
         fetchWeather(),
-        newsEnabled ? fetchNews() : Promise.resolve([])
+        newsEnabled ? fetchNews() : Promise.resolve([]),
+        emailsEnabled ? fetchGmailData() : Promise.resolve([])
     ]);
 
     // Elements
@@ -412,11 +484,27 @@ async function renderDashboard() {
     const newsSection = document.getElementById('news-section');
     const viewAllAssignmentsLink = document.getElementById('view-all-assignments');
     const viewAllAnnouncementsLink = document.getElementById('view-all-announcements');
+    const checkConnectionsBtn = document.getElementById('check-connections-btn');
 
     if (!assignmentsList || !announcementsList) {
         console.error("Dashboard elements missing");
         if (loadingIndicator) loadingIndicator.style.display = 'none';
         return;
+    }
+
+    // Connection health banners (Canvas + Email)
+    const connectionStatus = await fetchConnectionStatus();
+    renderConnectionStatus(connectionStatus);
+    if (checkConnectionsBtn && !checkConnectionsBtn.dataset.bound) {
+        checkConnectionsBtn.dataset.bound = '1';
+        checkConnectionsBtn.addEventListener('click', async () => {
+            checkConnectionsBtn.disabled = true;
+            checkConnectionsBtn.textContent = 'Checking...';
+            const freshStatus = await fetchConnectionStatus();
+            renderConnectionStatus(freshStatus);
+            checkConnectionsBtn.textContent = 'Check now';
+            checkConnectionsBtn.disabled = false;
+        });
     }
 
     // Format data
@@ -500,7 +588,7 @@ async function renderDashboard() {
             toRender = applyDefaultViewFilter(toRender);
         }
         
-        revealItems(assignmentsList, toRender, formatAssignment);
+        revealItems(assignmentsList, toRender, formatAssignment, 'No assignments match your current filters.');
         
         // Add urgency coloring
         document.querySelectorAll('#assignments-list .list-item').forEach((item, idx) => {
@@ -600,21 +688,29 @@ async function renderDashboard() {
     }
 
     // Emails (collapsed by default)
-    const emailAccounts = getEmailAccounts(config);
-    if (isEmailsEnabled(config) && emailAccounts.length > 0 && emailsSection) {
+    if (emailsEnabled && emailsSection) {
         emailsSection.style.display = 'block';
         const emailsList = document.getElementById('emails-list');
-        const emails = emailAccounts.slice(0, 3);
-        
+        const emails = (emailsData || []).slice(0, 5);
+
         function formatEmail(e) {
             const el = document.createElement('div');
-            el.className = 'list-item-primary';
-            el.textContent = e.subject || '(No subject)';
+            const primary = document.createElement('div');
+            primary.className = 'list-item-primary';
+            const unreadPrefix = e.unread ? '[Unread] ' : '';
+            primary.textContent = `${unreadPrefix}${e.subject || '(No subject)'}`;
+            const secondary = document.createElement('div');
+            secondary.className = 'list-item-secondary';
+            secondary.textContent = [e.account, e.sender, e.snippet].filter(Boolean).join(' - ') || 'No preview';
+            el.appendChild(primary);
+            el.appendChild(secondary);
             return el;
         }
-        
-        revealItems(emailsList, emails, formatEmail);
+
+        revealItems(emailsList, emails, formatEmail, 'No recent emails right now.');
         setupClickHandlers(emailsList);
+    } else if (emailsSection) {
+        emailsSection.style.display = 'none';
     }
 
     // Greeting & time

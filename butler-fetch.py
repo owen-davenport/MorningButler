@@ -4,6 +4,7 @@ import sys, os
 import json
 import requests
 import socket
+from urllib.parse import quote
 from datetime import datetime
 from datetime import timezone
 import re
@@ -182,6 +183,18 @@ def test_token(token):
     except Exception:
         return False
 
+def looks_like_canvas_token(token):
+    if not token:
+        return False
+    t = token.strip()
+    # Canvas API tokens should not contain whitespace/newlines.
+    if any(ch.isspace() for ch in t):
+        return False
+    # Very short strings are almost certainly not tokens.
+    if len(t) < 20:
+        return False
+    return True
+
 def get_courses(token):
     try:
         r = requests.get(
@@ -281,7 +294,13 @@ def fetch_gmail_unread(account, limit=5):
         imap = imaplib.IMAP4_SSL(host, port)
         imap.login(email_addr, app_password)
         imap.select("INBOX")
-        status, data = imap.search(None, "UNSEEN")
+        unread_ids = set()
+        status_unseen, data_unseen = imap.search(None, "UNSEEN")
+        if status_unseen == "OK":
+            unread_ids = set(data_unseen[0].split())
+
+        # Use recent inbox messages so the section is useful even when unread count is 0.
+        status, data = imap.search(None, "ALL")
         if status != "OK":
             imap.logout()
             return []
@@ -295,6 +314,7 @@ def fetch_gmail_unread(account, limit=5):
             msg = email.message_from_bytes(raw)
             from_val = _decode_mime_header(msg.get("From"))
             subject_val = _decode_mime_header(msg.get("Subject"))
+            message_id = (msg.get("Message-ID") or "").strip()
             date_val = msg.get("Date")
             timestamp = ""
             if date_val:
@@ -302,17 +322,44 @@ def fetch_gmail_unread(account, limit=5):
                     timestamp = parsedate_to_datetime(date_val).isoformat()
                 except Exception:
                     timestamp = date_val
+            email_url = ""
+            clean_message_id = message_id.strip("<>")
+            if clean_message_id:
+                email_url = f"https://mail.google.com/mail/u/0/#search/rfc822msgid:{quote(clean_message_id, safe='')}"
+            if not email_url:
+                fallback_query = " ".join([subject_val, from_val]).strip()
+                if fallback_query:
+                    email_url = f"https://mail.google.com/mail/u/0/#search/{quote(fallback_query)}"
             items.append({
                 "sender": from_val,
                 "subject": subject_val,
                 "snippet": _extract_snippet(msg),
-                "timestamp": timestamp
+                "timestamp": timestamp,
+                "message_id": clean_message_id,
+                "url": email_url,
+                "unread": msg_id in unread_ids
             })
         imap.logout()
     except Exception as e:
         print(f"[DEBUG] Gmail IMAP error: {e}")
         return []
     return items
+
+def test_gmail_connection(account):
+    email_addr = (account.get("email") or "").strip()
+    app_password = (account.get("app_password") or "").strip()
+    host = (account.get("imap_host") or "imap.gmail.com").strip()
+    port = int(account.get("imap_port") or 993)
+    if not email_addr or not app_password:
+        return False, "Missing email or app password"
+    try:
+        imap = imaplib.IMAP4_SSL(host, port)
+        imap.login(email_addr, app_password)
+        imap.select("INBOX")
+        imap.logout()
+        return True, ""
+    except Exception as e:
+        return False, str(e)
 
 def get_gmail_data(config):
     accounts = (config.get("emails") or {}).get("accounts", [])
@@ -583,6 +630,21 @@ def get_user_config():
 
 @app.route("/save_preferences", methods=["POST"])
 def save_preferences():
+    existing_config = {}
+    if os.path.exists(USER_CONFIG_FILE):
+        try:
+            with open(USER_CONFIG_FILE, "r", encoding="utf-8") as f:
+                existing_config = json.load(f)
+        except Exception:
+            existing_config = {}
+
+    existing_canvas = (existing_config.get("canvas") or {})
+    existing_token = (existing_canvas.get("token") or "").strip()
+    existing_expiration = (existing_canvas.get("token_expiration") or "").strip()
+    existing_courses = existing_canvas.get("courses") or []
+    existing_assignments = existing_canvas.get("assignments") or []
+    existing_aliases = existing_canvas.get("course_aliases") or {}
+
     canvas_enabled = request.form.get("canvas-reminders") == "on"
     canvas_token = request.form.get("canvas-API-token", "").strip()
     canvas_expiration = request.form.get("canvas-API-token-expiration", "").strip()
@@ -613,6 +675,21 @@ def save_preferences():
             alias = value.strip()
             if alias:
                 course_aliases[course_id] = alias
+    if not course_aliases and existing_aliases:
+        course_aliases = existing_aliases
+
+    if canvas_enabled and not canvas_token and existing_token:
+        canvas_token = existing_token
+    elif canvas_enabled and canvas_token:
+        if not looks_like_canvas_token(canvas_token):
+            # Prevent accidental overwrite from browser autofill/page text.
+            canvas_token = existing_token
+        else:
+            # Prefer newly entered valid token; otherwise keep a previously valid token.
+            if not test_token(canvas_token) and existing_token and test_token(existing_token):
+                canvas_token = existing_token
+    if not canvas_expiration and existing_expiration:
+        canvas_expiration = existing_expiration
 
     # Parse email accounts
     email_accounts = []
@@ -639,8 +716,8 @@ def save_preferences():
             "enabled": canvas_enabled,
             "token": canvas_token,
             "token_expiration": canvas_expiration,
-            "courses": [],
-            "assignments": [],
+            "courses": existing_courses,
+            "assignments": existing_assignments,
             "course_aliases": course_aliases
         },
         "weather": {
@@ -689,6 +766,8 @@ def save_preferences():
     # Fetch Canvas courses & assignments if token is valid
     if canvas_enabled and canvas_token:
         if test_token(canvas_token):
+            config["canvas"]["courses"] = []
+            config["canvas"]["assignments"] = []
             courses = get_courses(canvas_token)
             assignments_all = []
             for c in courses:
@@ -761,6 +840,66 @@ def gmail_data():
     items = get_gmail_data(config)
     return jsonify({"items": items})
 
+@app.route("/connection_status")
+def connection_status():
+    if not os.path.exists(USER_CONFIG_FILE):
+        return jsonify({
+            "canvas": {"configured": False, "connected": False, "message": "Not configured"},
+            "email": {"configured": False, "connected": False, "message": "Not configured"}
+        })
+
+    with open(USER_CONFIG_FILE, "r", encoding="utf-8") as f:
+        config = json.load(f)
+
+    canvas_cfg = (config.get("canvas") or {})
+    canvas_enabled = bool(canvas_cfg.get("enabled"))
+    canvas_token = (canvas_cfg.get("token") or "").strip()
+    canvas_configured = canvas_enabled and bool(canvas_token)
+    canvas_connected = False
+    canvas_message = "Not configured"
+    if canvas_configured:
+        canvas_connected = test_token(canvas_token)
+        canvas_message = "Connected" if canvas_connected else "Token invalid or expired"
+
+    email_cfg = (config.get("emails") or {})
+    email_enabled = bool(email_cfg.get("enabled"))
+    accounts = email_cfg.get("accounts") or []
+    usable_accounts = [a for a in accounts if (a.get("email") or "").strip() and (a.get("app_password") or "").strip()]
+    email_configured = email_enabled and len(usable_accounts) > 0
+    email_connected = False
+    email_message = "Not configured"
+    account_results = []
+    if email_configured:
+        for acc in usable_accounts:
+            ok, reason = test_gmail_connection(acc)
+            label = (acc.get("label") or acc.get("email") or "Email").strip()
+            account_results.append({
+                "account": label,
+                "connected": ok,
+                "message": "Connected" if ok else (reason or "Connection failed")
+            })
+        email_connected = any(a["connected"] for a in account_results)
+        if email_connected and all(a["connected"] for a in account_results):
+            email_message = "Connected"
+        elif email_connected:
+            email_message = "Some accounts connected"
+        else:
+            email_message = "Unable to connect"
+
+    return jsonify({
+        "canvas": {
+            "configured": canvas_configured,
+            "connected": canvas_connected,
+            "message": canvas_message
+        },
+        "email": {
+            "configured": email_configured,
+            "connected": email_connected,
+            "message": email_message,
+            "accounts": account_results
+        }
+    })
+
 @app.route("/canvas_data")
 def canvas_data():
     if not os.path.exists(USER_CONFIG_FILE):
@@ -774,7 +913,9 @@ def canvas_data():
     if not token or not test_token(token):
         return jsonify({"assignments": [], "announcements": []})
 
-    cache_key = f"canvas:{token}"
+    aliases = (config.get("canvas", {}) or {}).get("course_aliases", {})
+    aliases_fingerprint = json.dumps(aliases, sort_keys=True)
+    cache_key = f"canvas:{token}:{aliases_fingerprint}"
     cached = get_cached(cache_key)
     if cached:
         return jsonify(cached)
@@ -782,7 +923,6 @@ def canvas_data():
     # Fetch courses
     courses_raw = get_courses(token)
     courses = [c for c in courses_raw if is_real_academic_course(c)]
-    aliases = (config.get("canvas", {}) or {}).get("course_aliases", {})
 
     # Assignments
     assignments = []
@@ -844,7 +984,9 @@ def canvas_data():
             announcements.append({
                 "course": display_name,
                 "title": a.get("title", "Untitled"),
-                "posted": a.get("posted_at")
+                "posted": a.get("posted_at"),
+                "id": a.get("id"),
+                "url": a.get("html_url") or ""
             })
 
     payload = {"assignments": assignments, "announcements": announcements}

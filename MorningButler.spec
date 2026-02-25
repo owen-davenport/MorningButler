@@ -36,7 +36,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='/Users/owendavenport/morning_butler/SRC_CODE_Morning-Butler/butler.icns',
+    icon='butler.icns',
 )
 coll = COLLECT(
     exe,
@@ -50,6 +50,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='MorningButler.app',
-    icon='/Users/owendavenport/morning_butler/SRC_CODE_Morning-Butler/butler.icns',
+    icon='butler.icns',
     bundle_identifier=None,
 )

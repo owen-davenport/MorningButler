@@ -104,6 +104,41 @@
             75% { transform: translate(0, 18px); }
             100% { transform: translate(0, 0); }
         }
+        .help-block {
+            margin: 6px 0 10px 0;
+            font-size: 0.88em;
+        }
+        .help-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+            opacity: 0.85;
+        }
+        .help-icon {
+            width: 18px;
+            height: 18px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #1f7a8c;
+            color: #fff;
+            font-size: 0.75em;
+            font-weight: 700;
+        }
+        .help-panel {
+            margin-top: 8px;
+            padding: 10px 12px;
+            border-left: 3px solid rgba(0,0,0,0.25);
+            background: rgba(0,0,0,0.04);
+            line-height: 1.45;
+        }
+        .dark-theme .help-panel {
+            border-left-color: rgba(255,255,255,0.35);
+            background: rgba(255,255,255,0.06);
+        }
     </style>
 </head>
 <body>
@@ -146,6 +181,17 @@
                     <label for="recent-emails">Show Recent Emails:</label>
                     <input type="checkbox" id="recent-emails" name="recent-emails">
                 </div>
+                <details class="help-block">
+                    <summary class="help-toggle"><span class="help-icon">?</span>How do I add my email?</summary>
+                    <div class="help-panel">
+                        1. Turn on 2-Step Verification for your Google account.<br>
+                        2. Create a Google App Password (not your normal password).<br>
+                        3. Use your full Gmail address in Morning Butler.<br>
+                        4. Paste the 16-character App Password.<br>
+                        5. Keep IMAP host as <code>imap.gmail.com</code>.<br>
+                        6. In Gmail settings, ensure IMAP is enabled.<br>
+                    </div>
+                </details>
                 <div class="api-fields" id="email-fields">
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; margin-bottom: 10px; font-weight: 500;">Email Accounts:</label>
@@ -471,12 +517,19 @@
             const empty = document.getElementById('course-aliases-empty');
             if (!container) return;
             container.innerHTML = '';
-            if (!courses || courses.length === 0) {
+            const seen = new Set();
+            const uniqueCourses = (courses || []).filter(c => {
+                const key = String((c && c.id) || '');
+                if (!key || seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+            if (!uniqueCourses || uniqueCourses.length === 0) {
                 if (empty) empty.style.display = 'block';
                 return;
             }
             if (empty) empty.style.display = 'none';
-            courses.forEach(c => {
+            uniqueCourses.forEach(c => {
                 const row = document.createElement('div');
                 row.style.marginBottom = '8px';
                 const label = document.createElement('label');
