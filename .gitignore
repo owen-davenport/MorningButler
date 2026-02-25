@@ -2,3 +2,7 @@
 # Build artifacts
 /dist/
 /build/
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
