@@ -19,5 +19,13 @@ Morning Butler is a lightweight, local dashboard that pulls together your Canvas
 - Python is required for development.
 - Packaged builds do not require Python to be installed.
 
+## AI Contributions
+- Google-Gemini: UI ideas
+- Claude: Quality checks / audits
+- ChatGPT: Planning, control room, ideas
+- DeepSeek: Bug finding
+- Microsoft Copilot: Coding support
+- Codex: Primary coding & Git pushes
+
 ## License
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0). See `LICENSE.txt` for details.
